@@ -10,6 +10,7 @@ export default function DashboardScreen() {
   const [bodyweightLog, setBodyweightLog] = useState([]);
   const [goals, setGoals] = useState(null);
   const [streak, setStreak] = useState(0);
+  const [userName, setUserName] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -19,11 +20,12 @@ export default function DashboardScreen() {
 
   async function loadAll() {
     try {
-      const [nutrition, workout, bodyweight, savedGoals] = await Promise.all([
+      const [nutrition, workout, bodyweight, savedGoals, savedName] = await Promise.all([
         AsyncStorage.getItem('nutritionLog'),
         AsyncStorage.getItem('workoutLog'),
         AsyncStorage.getItem('bodyweightLog'),
         AsyncStorage.getItem('macroGoals'),
+        AsyncStorage.getItem('userName'),
       ]);
       const n = nutrition ? JSON.parse(nutrition) : [];
       const w = workout ? JSON.parse(workout) : [];
@@ -33,6 +35,7 @@ export default function DashboardScreen() {
       setWorkoutLog(w);
       setBodyweightLog(b);
       setGoals(g);
+      if (savedName) setUserName(savedName);
       calculateStreak(n, w);
     } catch (e) {
       console.log('Error loading dashboard', e);
@@ -82,7 +85,7 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.greeting}>{greeting}</Text>
+      <Text style={styles.greeting}>{greeting}{userName ? `, ${userName}` : ''}</Text>
       <Text style={styles.date}>{dateStr}</Text>
 
       <View style={styles.streakBar}>
