@@ -1,50 +1,54 @@
-# Welcome to your Expo app 👋
+# FitTrack
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A React Native fitness app built with Expo. Designed as a single destination for tracking workouts, nutrition, body weight, and health goals.
 
-## Get started
+## What's built so far
 
-1. Install dependencies
+### Screens
+- **Dashboard (Home)** — central hub showing today's calories, macro progress, workout summary, and body weight trend
+- **Workout** — log exercises with sets, reps, and weight. Resets daily
+- **Nutrition** — log meals with calories, protein, carbs, and fat. Progress bars vs daily targets. Resets daily
+- **Goals** — TDEE and BMR calculator using Mifflin-St Jeor formula. Supports goal weight, rate of loss/gain, and activity level
+- **Weight** — daily body weight log with timestamp history and trend chart
 
-   ```bash
-   npm install
-   ```
+### Features
+- Persistent local storage using AsyncStorage
+- Daily auto-reset for workout and nutrition logs
+- Macro progress bars modeled after Cronometer
+- Custom tab bar with icons (dumbbell, chicken leg, home, trophy, scale)
+- GitHub backup
 
-2. Start the app
+## Tech stack
+- React Native + Expo
+- expo-router for navigation
+- AsyncStorage for local storage
+- react-native-svg for icons
 
-   ```bash
-   npx expo start
-   ```
+## Roadmap
+### Phase 2 (next)
+- Barcode scanner for food logging
+- GPS activity tracking
+- Supabase cloud storage
+- Apple Health / wearable sync
 
-In the output, you'll find options to open the app in a
+### Phase 3
+- AI-powered health insights
+- Social feed and activity sharing
+- Multi-week training programs
+- Unified analytics dashboard
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Phase 4
+- Coaching marketplace
+- AI meal planning
+- Community challenges
+- Open API
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Running the app
+1. Install dependencies: `npm install`
+2. Start the server: `npx expo start`
+3. Scan the QR code with Expo Go on your phone
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Dev notes
+- All screens live in `app/(tabs)/`
+- Data is stored locally with AsyncStorage keys: `workoutLog`, `nutritionLog`, `bodyweightLog`, `macroGoals`
+- Daily reset logic checks `workoutLogDate` and `nutritionLogDate` keys
