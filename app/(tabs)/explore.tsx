@@ -19,6 +19,7 @@ export default function NutritionScreen() {
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
   const [log, setLog] = useState([]);
+  const [goalTargets, setGoalTargets] = useState(null);
 
   const totals = log.reduce(
     (acc, entry) => ({
@@ -32,14 +33,32 @@ export default function NutritionScreen() {
 
   useEffect(() => {
     loadLog();
+    loadGoals();
   }, []);
 
   async function loadLog() {
     try {
       const saved = await AsyncStorage.getItem('nutritionLog');
-      if (saved) setLog(JSON.parse(saved));
+      const lastDate = await AsyncStorage.getItem('nutritionLogDate');
+      const today = new Date().toDateString();
+
+      if (lastDate !== today) {
+        await AsyncStorage.setItem('nutritionLog', JSON.stringify([]));
+        await AsyncStorage.setItem('nutritionLogDate', today);
+        setLog([]);
+      } else if (saved) {
+        setLog(JSON.parse(saved));
+      }
     } catch (e) {
       console.log('Error loading nutrition log', e);
+    }
+  }
+  async function loadGoals() {
+    try {
+      const saved = await AsyncStorage.getItem('macroGoals');
+      if (saved) setGoalTargets(JSON.parse(saved));
+    } catch (e) {
+      console.log('Error loading goals', e);
     }
   }
 
@@ -52,6 +71,7 @@ export default function NutritionScreen() {
     const newLog = [entry, ...log];
     setLog(newLog);
     await AsyncStorage.setItem('nutritionLog', JSON.stringify(newLog));
+    await AsyncStorage.setItem('nutritionLogDate', new Date().toDateString());
     setFoodName('');
     setCalories('');
     setProtein('');
@@ -59,28 +79,69 @@ export default function NutritionScreen() {
     setFat('');
   }
 
+  function ProgressBar({ label, current, target, color, large }) {
+    const pct = target ? Math.min(current / target, 1) : 0;
+    const over = target ? current > target : false;
+
+    return (
+      <View style={large ? styles.bigBarWrap : styles.barWrap}>
+        <View style={styles.barLabelRow}>
+          <Text style={large ? styles.bigBarLabel : styles.barLabel}>{label}</Text>
+          <Text style={large ? styles.bigBarNumbers : styles.barNumbers}>
+            {Math.round(current)}
+            {target ? <Text style={styles.barTarget}> / {target}{large ? ' kcal' : 'g'}</Text> : ''}
+          </Text>
+        </View>
+        <View style={large ? styles.bigBarTrack : styles.barTrack}>
+          <View
+            style={[
+              large ? styles.bigBarFill : styles.barFill,
+              { width: `${Math.round(pct * 100)}%`, backgroundColor: over ? '#E24B4A' : color }
+            ]}
+          />
+        </View>
+        {over && (
+          <Text style={styles.overText}>+{Math.round(current - target)}{large ? ' kcal over' : 'g over'}</Text>
+        )}
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Nutrition</Text>
 
-      {log.length > 0 && (
-        <View style={styles.totalsRow}>
-          <View style={styles.totalCard}>
-            <Text style={styles.totalValue}>{totals.calories}</Text>
-            <Text style={styles.totalLabel}>kcal</Text>
-          </View>
-          <View style={styles.totalCard}>
-            <Text style={styles.totalValue}>{totals.protein}g</Text>
-            <Text style={styles.totalLabel}>protein</Text>
-          </View>
-          <View style={styles.totalCard}>
-            <Text style={styles.totalValue}>{totals.carbs}g</Text>
-            <Text style={styles.totalLabel}>carbs</Text>
-          </View>
-          <View style={styles.totalCard}>
-            <Text style={styles.totalValue}>{totals.fat}g</Text>
-            <Text style={styles.totalLabel}>fat</Text>
-          </View>
+      {goalTargets ? (
+        <View style={styles.progressSection}>
+          <ProgressBar
+            label="Calories"
+            current={totals.calories}
+            target={goalTargets.targetCalories}
+            color="#111"
+            large={true}
+          />
+          <ProgressBar
+            label="Protein"
+            current={totals.protein}
+            target={goalTargets.protein}
+            color="#534AB7"
+          />
+          <ProgressBar
+            label="Carbs"
+            current={totals.carbs}
+            target={goalTargets.carbs}
+            color="#1D9E75"
+          />
+          <ProgressBar
+            label="Fat"
+            current={totals.fat}
+            target={goalTargets.fat}
+            color="#D85A30"
+          />
+        </View>
+      ) : (
+        <View style={styles.noGoalsBanner}>
+          <Text style={styles.noGoalsText}>Set your goals in the Goals tab to see progress tracking</Text>
         </View>
       )}
 
@@ -190,11 +251,23 @@ export default function NutritionScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 24, paddingTop: 60 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#111', marginBottom: 24 },
-  totalsRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
-  totalCard: { flex: 1, backgroundColor: '#f4f4f4', borderRadius: 12, padding: 12, alignItems: 'center' },
-  totalValue: { fontSize: 18, fontWeight: '700', color: '#111' },
-  totalLabel: { fontSize: 11, color: '#888', marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.5 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#111', marginBottom: 20 },
+  progressSection: { backgroundColor: '#f9f9f9', borderRadius: 16, padding: 16, marginBottom: 24 },
+  noGoalsBanner: { backgroundColor: '#f4f4f4', borderRadius: 12, padding: 14, marginBottom: 24 },
+  noGoalsText: { fontSize: 13, color: '#888', textAlign: 'center' },
+  bigBarWrap: { marginBottom: 16 },
+  barWrap: { marginBottom: 12 },
+  barLabelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 },
+  bigBarLabel: { fontSize: 15, fontWeight: '700', color: '#111' },
+  barLabel: { fontSize: 13, fontWeight: '600', color: '#555' },
+  bigBarNumbers: { fontSize: 15, fontWeight: '700', color: '#111' },
+  barNumbers: { fontSize: 12, fontWeight: '600', color: '#555' },
+  barTarget: { fontWeight: '400', color: '#aaa' },
+  bigBarTrack: { height: 14, backgroundColor: '#e4e4e4', borderRadius: 7, overflow: 'hidden' },
+  barTrack: { height: 8, backgroundColor: '#e4e4e4', borderRadius: 4, overflow: 'hidden' },
+  bigBarFill: { height: '100%', borderRadius: 7 },
+  barFill: { height: '100%', borderRadius: 4 },
+  overText: { fontSize: 11, color: '#E24B4A', marginTop: 3 },
   label: { fontSize: 13, fontWeight: '600', color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   pills: { flexDirection: 'row', marginBottom: 16 },
   pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', marginRight: 8, backgroundColor: '#f9f9f9' },

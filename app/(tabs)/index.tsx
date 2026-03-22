@@ -28,7 +28,16 @@ export default function HomeScreen() {
   async function loadLog() {
     try {
       const saved = await AsyncStorage.getItem('workoutLog');
-      if (saved) setLog(JSON.parse(saved));
+      const lastDate = await AsyncStorage.getItem('workoutLogDate');
+      const today = new Date().toDateString();
+
+      if (lastDate !== today) {
+        await AsyncStorage.setItem('workoutLog', JSON.stringify([]));
+        await AsyncStorage.setItem('workoutLogDate', today);
+        setLog([]);
+      } else if (saved) {
+        setLog(JSON.parse(saved));
+      }
     } catch (e) {
       console.log('Error loading workout log', e);
     }
@@ -43,6 +52,7 @@ export default function HomeScreen() {
     const newLog = [entry, ...log];
     setLog(newLog);
     await AsyncStorage.setItem('workoutLog', JSON.stringify(newLog));
+    await AsyncStorage.setItem('workoutLogDate', new Date().toDateString());
     setSets('');
     setReps('');
     setWeight('');
