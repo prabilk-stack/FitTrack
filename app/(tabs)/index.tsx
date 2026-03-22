@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -50,6 +51,7 @@ function SwipeableEntry({ children, onDelete }) {
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [selectedExercise, setSelectedExercise] = useState('');
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState('');
@@ -116,9 +118,12 @@ export default function HomeScreen() {
           weight,
         });
         if (error) console.log('Supabase error', error.message);
+      } else {
+        await AsyncStorage.setItem('workoutLog', JSON.stringify(newLog));
+        await AsyncStorage.setItem('workoutLogDate', new Date().toDateString());
       }
     } catch (e) {
-      Alert.alert('Error', String(e));
+      console.log('Error saving set', e);
     }
 
     setSets('');
@@ -144,6 +149,10 @@ export default function HomeScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Log Workout</Text>
+
+      <TouchableOpacity style={styles.cardioButton} onPress={() => router.push('/(tabs)/cardio')}>
+        <Text style={styles.cardioButtonText}>Start cardio activity</Text>
+      </TouchableOpacity>
 
       <Text style={styles.label}>Select an exercise</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pills}>
@@ -214,7 +223,9 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   content: { padding: 24, paddingTop: 60 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#111', marginBottom: 24 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#111', marginBottom: 16 },
+  cardioButton: { backgroundColor: '#f4f4f4', borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#eee' },
+  cardioButtonText: { fontSize: 14, fontWeight: '600', color: '#111' },
   label: { fontSize: 13, fontWeight: '600', color: '#888', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   pills: { flexDirection: 'row', marginBottom: 16 },
   pill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#ddd', marginRight: 8, backgroundColor: '#f9f9f9' },

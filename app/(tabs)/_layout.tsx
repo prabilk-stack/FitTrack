@@ -9,6 +9,7 @@ export default function TabLayout() {
       <Stack.Screen name="goals" />
       <Stack.Screen name="bodyweight" />
       <Stack.Screen name="settings" />
+      <Stack.Screen name="cardio" />
     </Stack>
   );
 }
