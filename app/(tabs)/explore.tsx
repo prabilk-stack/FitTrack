@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
+  Alert, Modal,
   ScrollView,
   StyleSheet, Text,
   TextInput,
@@ -18,8 +20,14 @@ export default function NutritionScreen() {
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
+  const [quantity, setQuantity] = useState('1');
+  const [baseNutrition, setBaseNutrition] = useState(null);
   const [log, setLog] = useState([]);
   const [goalTargets, setGoalTargets] = useState(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scanning, setScanning] = useState(true);
+  const [loadingProduct, setLoadingProduct] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
 
   const totals = log.reduce(
     (acc, entry) => ({
@@ -41,7 +49,6 @@ export default function NutritionScreen() {
       const saved = await AsyncStorage.getItem('nutritionLog');
       const lastDate = await AsyncStorage.getItem('nutritionLogDate');
       const today = new Date().toDateString();
-
       if (lastDate !== today) {
         await AsyncStorage.setItem('nutritionLog', JSON.stringify([]));
         await AsyncStorage.setItem('nutritionLogDate', today);
@@ -53,6 +60,7 @@ export default function NutritionScreen() {
       console.log('Error loading nutrition log', e);
     }
   }
+
   async function loadGoals() {
     try {
       const saved = await AsyncStorage.getItem('macroGoals');
@@ -60,6 +68,70 @@ export default function NutritionScreen() {
     } catch (e) {
       console.log('Error loading goals', e);
     }
+  }
+
+  async function openScanner() {
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('Camera access needed', 'Please allow camera access to scan barcodes.');
+        return;
+      }
+    }
+    setScanning(true);
+    setScannerOpen(true);
+  }
+
+  async function handleBarcodeScan({ data }) {
+    if (!scanning) return;
+    setScanning(false);
+    setScannerOpen(false);
+    setLoadingProduct(true);
+
+    try {
+      const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${data}.json`);
+      const json = await res.json();
+
+      if (json.status !== 1 || !json.product) {
+        Alert.alert('Product not found', 'This barcode wasn\'t found in the Open Food Facts database. Please enter nutrition manually.');
+        setLoadingProduct(false);
+        return;
+      }
+
+      const p = json.product;
+      const nutriments = p.nutriments || {};
+      const servingSize = p.serving_quantity || 100;
+
+      const base = {
+        name: p.product_name || 'Unknown product',
+        calories: Math.round(nutriments['energy-kcal_serving'] || nutriments['energy-kcal_100g'] || 0),
+        protein: Math.round((nutriments['proteins_serving'] || nutriments['proteins_100g'] || 0) * 10) / 10,
+        carbs: Math.round((nutriments['carbohydrates_serving'] || nutriments['carbohydrates_100g'] || 0) * 10) / 10,
+        fat: Math.round((nutriments['fat_serving'] || nutriments['fat_100g'] || 0) * 10) / 10,
+        servingSize,
+      };
+
+      setBaseNutrition(base);
+      setFoodName(base.name);
+      setQuantity('1');
+      setCalories(String(base.calories));
+      setProtein(String(base.protein));
+      setCarbs(String(base.carbs));
+      setFat(String(base.fat));
+    } catch (e) {
+      Alert.alert('Error', 'Could not fetch product info. Please check your connection.');
+    }
+    setLoadingProduct(false);
+  }
+
+  function updateQuantity(q) {
+    setQuantity(q);
+    if (!baseNutrition || !q || isNaN(parseFloat(q))) return;
+    const mult = parseFloat(q);
+    setCalories(String(Math.round(baseNutrition.calories * mult)));
+    setProtein(String(Math.round(baseNutrition.protein * mult * 10) / 10));
+    setCarbs(String(Math.round(baseNutrition.carbs * mult * 10) / 10));
+    setFat(String(Math.round(baseNutrition.fat * mult * 10) / 10));
   }
 
   async function saveFood() {
@@ -77,12 +149,13 @@ export default function NutritionScreen() {
     setProtein('');
     setCarbs('');
     setFat('');
+    setQuantity('1');
+    setBaseNutrition(null);
   }
 
   function ProgressBar({ label, current, target, color, large }) {
     const pct = target ? Math.min(current / target, 1) : 0;
     const over = target ? current > target : false;
-
     return (
       <View style={large ? styles.bigBarWrap : styles.barWrap}>
         <View style={styles.barLabelRow}>
@@ -93,16 +166,9 @@ export default function NutritionScreen() {
           </Text>
         </View>
         <View style={large ? styles.bigBarTrack : styles.barTrack}>
-          <View
-            style={[
-              large ? styles.bigBarFill : styles.barFill,
-              { width: `${Math.round(pct * 100)}%`, backgroundColor: over ? '#E24B4A' : color }
-            ]}
-          />
+          <View style={[large ? styles.bigBarFill : styles.barFill, { width: `${Math.round(pct * 100)}%`, backgroundColor: over ? '#E24B4A' : color }]} />
         </View>
-        {over && (
-          <Text style={styles.overText}>+{Math.round(current - target)}{large ? ' kcal over' : 'g over'}</Text>
-        )}
+        {over && <Text style={styles.overText}>+{Math.round(current - target)}{large ? ' kcal over' : 'g over'}</Text>}
       </View>
     );
   }
@@ -113,31 +179,10 @@ export default function NutritionScreen() {
 
       {goalTargets ? (
         <View style={styles.progressSection}>
-          <ProgressBar
-            label="Calories"
-            current={totals.calories}
-            target={goalTargets.targetCalories}
-            color="#111"
-            large={true}
-          />
-          <ProgressBar
-            label="Protein"
-            current={totals.protein}
-            target={goalTargets.protein}
-            color="#534AB7"
-          />
-          <ProgressBar
-            label="Carbs"
-            current={totals.carbs}
-            target={goalTargets.carbs}
-            color="#1D9E75"
-          />
-          <ProgressBar
-            label="Fat"
-            current={totals.fat}
-            target={goalTargets.fat}
-            color="#D85A30"
-          />
+          <ProgressBar label="Calories" current={totals.calories} target={goalTargets.targetCalories} color="#111" large={true} />
+          <ProgressBar label="Protein" current={totals.protein} target={goalTargets.protein} color="#534AB7" />
+          <ProgressBar label="Carbs" current={totals.carbs} target={goalTargets.carbs} color="#1D9E75" />
+          <ProgressBar label="Fat" current={totals.fat} target={goalTargets.fat} color="#D85A30" />
         </View>
       ) : (
         <View style={styles.noGoalsBanner}>
@@ -153,9 +198,7 @@ export default function NutritionScreen() {
             style={[styles.pill, selectedMeal === meal && styles.pillActive]}
             onPress={() => setSelectedMeal(meal)}
           >
-            <Text style={[styles.pillText, selectedMeal === meal && styles.pillTextActive]}>
-              {meal}
-            </Text>
+            <Text style={[styles.pillText, selectedMeal === meal && styles.pillTextActive]}>{meal}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -166,6 +209,17 @@ export default function NutritionScreen() {
             Adding to: <Text style={styles.selectedName}>{selectedMeal}</Text>
           </Text>
 
+          <TouchableOpacity style={styles.scanButton} onPress={openScanner}>
+            <Text style={styles.scanButtonText}>Scan barcode</Text>
+          </TouchableOpacity>
+
+          {loadingProduct && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color="#111" />
+              <Text style={styles.loadingText}>Looking up product...</Text>
+            </View>
+          )}
+
           <Text style={styles.label}>Food name</Text>
           <TextInput
             style={[styles.input, { marginBottom: 16 }]}
@@ -174,49 +228,44 @@ export default function NutritionScreen() {
             placeholder="e.g. Chicken breast"
           />
 
+          {baseNutrition && (
+            <View style={styles.quantityRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Servings</Text>
+                <TextInput
+                  style={styles.input}
+                  keyboardType="numeric"
+                  value={quantity}
+                  onChangeText={updateQuantity}
+                  placeholder="1"
+                />
+              </View>
+              <View style={styles.servingInfo}>
+                <Text style={styles.servingLabel}>Per serving</Text>
+                <Text style={styles.servingVal}>{baseNutrition.calories} kcal</Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.row}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Calories</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={calories}
-                onChangeText={setCalories}
-                placeholder="300"
-              />
+              <TextInput style={styles.input} keyboardType="numeric" value={calories} onChangeText={setCalories} placeholder="300" />
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Protein (g)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={protein}
-                onChangeText={setProtein}
-                placeholder="30"
-              />
+              <TextInput style={styles.input} keyboardType="numeric" value={protein} onChangeText={setProtein} placeholder="30" />
             </View>
           </View>
 
           <View style={styles.row}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Carbs (g)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={carbs}
-                onChangeText={setCarbs}
-                placeholder="20"
-              />
+              <TextInput style={styles.input} keyboardType="numeric" value={carbs} onChangeText={setCarbs} placeholder="20" />
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Fat (g)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={fat}
-                onChangeText={setFat}
-                placeholder="10"
-              />
+              <TextInput style={styles.input} keyboardType="numeric" value={fat} onChangeText={setFat} placeholder="10" />
             </View>
           </View>
 
@@ -244,6 +293,24 @@ export default function NutritionScreen() {
           ))}
         </View>
       )}
+
+      <Modal visible={scannerOpen} animationType="slide">
+        <View style={styles.scannerContainer}>
+          <CameraView
+            style={styles.camera}
+            facing="back"
+            onBarcodeScanned={scanning ? handleBarcodeScan : undefined}
+            barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39'] }}
+          />
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scannerFrame} />
+            <Text style={styles.scannerHint}>Point at a barcode</Text>
+          </View>
+          <TouchableOpacity style={styles.cancelScan} onPress={() => setScannerOpen(false)}>
+            <Text style={styles.cancelScanText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -275,8 +342,16 @@ const styles = StyleSheet.create({
   pillText: { fontSize: 14, color: '#555' },
   pillTextActive: { color: '#fff', fontWeight: '600' },
   hint: { fontSize: 14, color: '#aaa', textAlign: 'center', marginTop: 32, marginBottom: 32 },
-  selectedLabel: { fontSize: 14, color: '#888', marginBottom: 20, marginTop: 8 },
+  selectedLabel: { fontSize: 14, color: '#888', marginBottom: 16, marginTop: 8 },
   selectedName: { color: '#111', fontWeight: '700' },
+  scanButton: { backgroundColor: '#f4f4f4', borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: '#eee' },
+  scanButtonText: { fontSize: 14, fontWeight: '600', color: '#111' },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+  loadingText: { fontSize: 13, color: '#888' },
+  quantityRow: { flexDirection: 'row', gap: 12, marginBottom: 16, alignItems: 'flex-end' },
+  servingInfo: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 12, justifyContent: 'center', alignItems: 'center', minWidth: 90 },
+  servingLabel: { fontSize: 10, color: '#aaa', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  servingVal: { fontSize: 14, fontWeight: '700', color: '#111' },
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#f9f9f9' },
   row: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   inputGroup: { flex: 1 },
@@ -286,7 +361,14 @@ const styles = StyleSheet.create({
   logTitle: { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 16 },
   logEntry: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
   logEntryTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  logFood: { fontSize: 15, fontWeight: '600', color: '#111' },
+  logFood: { fontSize: 15, fontWeight: '600', color: '#111', flex: 1 },
   logMeal: { fontSize: 12, color: '#888', fontWeight: '500' },
   logDetail: { fontSize: 13, color: '#666' },
+  scannerContainer: { flex: 1, backgroundColor: '#000' },
+  camera: { flex: 1 },
+  scannerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },
+  scannerFrame: { width: 240, height: 160, borderWidth: 2, borderColor: '#fff', borderRadius: 12 },
+  scannerHint: { color: '#fff', fontSize: 14, marginTop: 16, opacity: 0.8 },
+  cancelScan: { position: 'absolute', bottom: 60, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 30 },
+  cancelScanText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });
