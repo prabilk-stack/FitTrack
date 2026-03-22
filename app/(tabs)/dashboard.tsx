@@ -138,7 +138,7 @@ export default function DashboardScreen() {
       </TouchableOpacity>
 
       <View style={styles.cardsGrid}>
-        <TouchableOpacity style={styles.navCard} onPress={() => router.push('/(tabs)/index')}>
+        <TouchableOpacity style={styles.navCard} onPress={() => router.push('/(tabs)/')}>
           <Text style={styles.navCardLabel}>Workout</Text>
           {workoutLog.length > 0 ? (
             <>

@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { getTodayRange, getUserId, supabase } from '../supabase';
 
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
 
@@ -82,12 +83,33 @@ export default function NutritionScreen() {
 
   async function loadLog() {
     try {
+      const userId = await getUserId();
+      if (userId) {
+        const { start, end } = getTodayRange();
+        const { data, error } = await supabase
+          .from('nutrition_log')
+          .select('*')
+          .eq('user_id', userId)
+          .gte('logged_at', start)
+          .lte('logged_at', end)
+          .order('logged_at', { ascending: false });
+        if (!error && data) {
+          setLog(data.map(e => ({
+            id: e.id,
+            selectedMeal: e.meal,
+            foodName: e.food_name,
+            calories: e.calories,
+            protein: e.protein,
+            carbs: e.carbs,
+            fat: e.fat,
+          })));
+          return;
+        }
+      }
       const saved = await AsyncStorage.getItem('nutritionLog');
       const lastDate = await AsyncStorage.getItem('nutritionLogDate');
       const today = new Date().toDateString();
       if (lastDate !== today) {
-        await AsyncStorage.setItem('nutritionLog', JSON.stringify([]));
-        await AsyncStorage.setItem('nutritionLogDate', today);
         setLog([]);
       } else if (saved) {
         setLog(JSON.parse(saved));
@@ -171,8 +193,27 @@ export default function NutritionScreen() {
     const entry = { selectedMeal, foodName, calories, protein, carbs, fat, id: Date.now() };
     const newLog = [entry, ...log];
     setLog(newLog);
-    await AsyncStorage.setItem('nutritionLog', JSON.stringify(newLog));
-    await AsyncStorage.setItem('nutritionLogDate', new Date().toDateString());
+
+    try {
+      const userId = await getUserId();
+      if (userId) {
+        await supabase.from('nutrition_log').insert({
+          user_id: userId,
+          meal: selectedMeal,
+          food_name: foodName,
+          calories: parseFloat(calories),
+          protein: parseFloat(protein),
+          carbs: parseFloat(carbs),
+          fat: parseFloat(fat),
+        });
+      } else {
+        await AsyncStorage.setItem('nutritionLog', JSON.stringify(newLog));
+        await AsyncStorage.setItem('nutritionLogDate', new Date().toDateString());
+      }
+    } catch (e) {
+      console.log('Error saving food', e);
+    }
+
     setFoodName('');
     setCalories('');
     setProtein('');
@@ -182,10 +223,19 @@ export default function NutritionScreen() {
     setBaseNutrition(null);
   }
 
-  async function deleteEntry(id) {
-    const newLog = log.filter(e => e.id !== id);
+  async function deleteEntry(entry) {
+    const newLog = log.filter(e => e.id !== entry.id);
     setLog(newLog);
-    await AsyncStorage.setItem('nutritionLog', JSON.stringify(newLog));
+    try {
+      const userId = await getUserId();
+      if (userId && typeof entry.id === 'string') {
+        await supabase.from('nutrition_log').delete().eq('id', entry.id);
+      } else {
+        await AsyncStorage.setItem('nutritionLog', JSON.stringify(newLog));
+      }
+    } catch (e) {
+      console.log('Error deleting entry', e);
+    }
   }
 
   function ProgressBar({ label, current, target, color, large }) {
@@ -316,7 +366,7 @@ export default function NutritionScreen() {
         <View style={styles.logSection}>
           <Text style={styles.logTitle}>Today's Food</Text>
           {log.map(entry => (
-            <SwipeableEntry key={entry.id} onDelete={() => deleteEntry(entry.id)}>
+            <SwipeableEntry key={entry.id} onDelete={() => deleteEntry(entry)}>
               <View style={styles.logEntry}>
                 <View style={styles.logEntryTop}>
                   <Text style={styles.logFood}>{entry.foodName}</Text>

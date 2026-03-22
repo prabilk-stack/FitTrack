@@ -2,12 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Pressable,
-    StyleSheet,
-    Text, TouchableOpacity,
-    View
+  Animated,
+  Dimensions,
+  Pressable,
+  StyleSheet,
+  Text, TouchableOpacity,
+  View
 } from 'react-native';
 import Svg, { Circle, Ellipse, Line, Path, Rect } from 'react-native-svg';
 
@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   },
   {
     label: 'Workout',
-    route: '/(tabs)/index',
+    route: '/(tabs)/',
     icon: (color) => (
       <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
         <Rect x="2" y="10" width="3" height="4" rx="1" />

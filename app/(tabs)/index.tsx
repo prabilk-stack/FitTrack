@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import { getTodayRange, getUserId, supabase } from '../supabase';
 
 const EXERCISES = [
   'Bench Press', 'Squat', 'Deadlift', 'Overhead Press',
@@ -61,12 +62,31 @@ export default function HomeScreen() {
 
   async function loadLog() {
     try {
+      const userId = await getUserId();
+      if (userId) {
+        const { start, end } = getTodayRange();
+        const { data, error } = await supabase
+          .from('workout_log')
+          .select('*')
+          .eq('user_id', userId)
+          .gte('logged_at', start)
+          .lte('logged_at', end)
+          .order('logged_at', { ascending: false });
+        if (!error && data) {
+          setLog(data.map(e => ({
+            id: e.id,
+            exercise: e.exercise,
+            sets: e.sets,
+            reps: e.reps,
+            weight: e.weight,
+          })));
+          return;
+        }
+      }
       const saved = await AsyncStorage.getItem('workoutLog');
       const lastDate = await AsyncStorage.getItem('workoutLogDate');
       const today = new Date().toDateString();
       if (lastDate !== today) {
-        await AsyncStorage.setItem('workoutLog', JSON.stringify([]));
-        await AsyncStorage.setItem('workoutLogDate', today);
         setLog([]);
       } else if (saved) {
         setLog(JSON.parse(saved));
@@ -84,17 +104,41 @@ export default function HomeScreen() {
     const entry = { exercise: selectedExercise, sets, reps, weight, id: Date.now() };
     const newLog = [entry, ...log];
     setLog(newLog);
-    await AsyncStorage.setItem('workoutLog', JSON.stringify(newLog));
-    await AsyncStorage.setItem('workoutLogDate', new Date().toDateString());
+
+    try {
+      const userId = await getUserId();
+      if (userId) {
+        const { error } = await supabase.from('workout_log').insert({
+          user_id: userId,
+          exercise: selectedExercise,
+          sets,
+          reps,
+          weight,
+        });
+        if (error) console.log('Supabase error', error.message);
+      }
+    } catch (e) {
+      Alert.alert('Error', String(e));
+    }
+
     setSets('');
     setReps('');
     setWeight('');
   }
 
-  async function deleteEntry(id) {
-    const newLog = log.filter(e => e.id !== id);
+  async function deleteEntry(entry) {
+    const newLog = log.filter(e => e.id !== entry.id);
     setLog(newLog);
-    await AsyncStorage.setItem('workoutLog', JSON.stringify(newLog));
+    try {
+      const userId = await getUserId();
+      if (userId && typeof entry.id === 'string') {
+        await supabase.from('workout_log').delete().eq('id', entry.id);
+      } else {
+        await AsyncStorage.setItem('workoutLog', JSON.stringify(newLog));
+      }
+    } catch (e) {
+      console.log('Error deleting entry', e);
+    }
   }
 
   return (
@@ -152,7 +196,7 @@ export default function HomeScreen() {
         <View style={styles.logSection}>
           <Text style={styles.logTitle}>Today's Workout</Text>
           {log.map(entry => (
-            <SwipeableEntry key={entry.id} onDelete={() => deleteEntry(entry.id)}>
+            <SwipeableEntry key={entry.id} onDelete={() => deleteEntry(entry)}>
               <View style={styles.logEntry}>
                 <Text style={styles.logExercise}>{entry.exercise}</Text>
                 <Text style={styles.logDetail}>

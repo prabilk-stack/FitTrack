@@ -1,14 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated, PanResponder,
-    ScrollView,
-    StyleSheet, Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated, PanResponder,
+  ScrollView,
+  StyleSheet, Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { getUserId, supabase } from '../supabase';
 
 function SwipeableEntry({ children, onDelete }) {
   const translateX = useRef(new Animated.Value(0)).current;
@@ -55,6 +56,23 @@ export default function BodyWeightScreen() {
 
   async function loadLog() {
     try {
+      const userId = await getUserId();
+      if (userId) {
+        const { data, error } = await supabase
+          .from('bodyweight_log')
+          .select('*')
+          .eq('user_id', userId)
+          .order('logged_at', { ascending: false })
+          .limit(90);
+        if (!error && data) {
+          setLog(data.map(e => ({
+            id: e.id,
+            weight: e.weight,
+            date: new Date(e.logged_at).toLocaleString(),
+          })));
+          return;
+        }
+      }
       const saved = await AsyncStorage.getItem('bodyweightLog');
       if (saved) setLog(JSON.parse(saved));
     } catch (e) {
@@ -80,18 +98,39 @@ export default function BodyWeightScreen() {
       return;
     }
     const now = new Date();
-    const timestamp = now.toLocaleString();
-    const entry = { weight: parseFloat(weight), date: timestamp };
+    const entry = { weight: parseFloat(weight), date: now.toLocaleString(), id: now.getTime() };
     const newLog = [entry, ...log].slice(0, 90);
     setLog(newLog);
-    await AsyncStorage.setItem('bodyweightLog', JSON.stringify(newLog));
+
+    try {
+      const userId = await getUserId();
+      if (userId) {
+        await supabase.from('bodyweight_log').insert({
+          user_id: userId,
+          weight: parseFloat(weight),
+        });
+      } else {
+        await AsyncStorage.setItem('bodyweightLog', JSON.stringify(newLog));
+      }
+    } catch (e) {
+      console.log('Error saving weight', e);
+    }
     setWeight('');
   }
 
-  async function deleteWeightEntry(index) {
-    const newLog = log.filter((_, i) => i !== index);
+  async function deleteWeightEntry(entry) {
+    const newLog = log.filter(e => e.id !== entry.id);
     setLog(newLog);
-    await AsyncStorage.setItem('bodyweightLog', JSON.stringify(newLog));
+    try {
+      const userId = await getUserId();
+      if (userId && typeof entry.id === 'string') {
+        await supabase.from('bodyweight_log').delete().eq('id', entry.id);
+      } else {
+        await AsyncStorage.setItem('bodyweightLog', JSON.stringify(newLog));
+      }
+    } catch (e) {
+      console.log('Error deleting weight entry', e);
+    }
   }
 
   const latest = log[0]?.weight;
@@ -210,8 +249,8 @@ export default function BodyWeightScreen() {
       {log.length > 0 && (
         <View style={styles.logSection}>
           <Text style={styles.logTitle}>History</Text>
-          {log.map((entry, i) => (
-  <SwipeableEntry key={entry.date + entry.weight} onDelete={() => deleteWeightEntry(i)}>
+          {log.map((entry) => (
+            <SwipeableEntry key={entry.id} onDelete={() => deleteWeightEntry(entry)}>
               <View style={styles.logEntry}>
                 <Text style={styles.logDate}>{entry.date}</Text>
                 <Text style={styles.logWeight}>{entry.weight} lbs</Text>

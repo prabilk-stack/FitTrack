@@ -2,12 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    Alert,
-    ScrollView,
-    StyleSheet, Text,
-    TouchableOpacity,
-    View
+  Alert,
+  ScrollView,
+  StyleSheet, Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { supabase } from '../supabase';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -32,6 +33,22 @@ export default function SettingsScreen() {
     } catch (e) {
       console.log('Error loading settings', e);
     }
+  }
+
+  async function handleSignOut() {
+    Alert.alert(
+      'Sign out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign out',
+          onPress: async () => {
+            await supabase.auth.signOut();
+          }
+        }
+      ]
+    );
   }
 
   async function redoOnboarding() {
@@ -163,6 +180,11 @@ export default function SettingsScreen() {
       <View style={styles.actionsCard}>
         <TouchableOpacity style={styles.actionRow} onPress={redoOnboarding}>
           <Text style={styles.actionText}>Update my goals</Text>
+          <Text style={styles.actionArrow}>→</Text>
+        </TouchableOpacity>
+        <View style={styles.divider} />
+        <TouchableOpacity style={styles.actionRow} onPress={handleSignOut}>
+          <Text style={styles.actionText}>Sign out</Text>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
