@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Slot, useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import Drawer from './_drawer';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -22,5 +23,9 @@ export default function RootLayout() {
     }
   }
 
-  return <Slot />;
+  return (
+    <Drawer>
+      <Slot />
+    </Drawer>
+  );
 }
