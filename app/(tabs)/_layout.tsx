@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import Svg, { Ellipse, Line, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Line, Path, Rect } from 'react-native-svg';
 
 function DumbbellIcon({ color }: { color: string }) {
   return (
@@ -56,6 +56,15 @@ function HomeIcon({ color }: { color: string }) {
   );
 }
 
+function SettingsIcon({ color }: { color: string }) {
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="3" />
+      <Path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+    </Svg>
+  );
+}
+
 export default function TabLayout() {
   return (
     <Tabs
@@ -100,6 +109,13 @@ export default function TabLayout() {
         options={{
           title: 'Weight',
           tabBarIcon: ({ color }) => <ScaleIcon color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color }) => <SettingsIcon color={color} />,
         }}
       />
       <Tabs.Screen
