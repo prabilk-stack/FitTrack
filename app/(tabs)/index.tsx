@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated, PanResponder,
   ScrollView,
   StyleSheet, Text,
   TextInput,
@@ -13,6 +14,39 @@ const EXERCISES = [
   'Bench Press', 'Squat', 'Deadlift', 'Overhead Press',
   'Barbell Row', 'Pull Up', 'Dumbbell Curl', 'Tricep Dip'
 ];
+
+function SwipeableEntry({ children, onDelete }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dy) < 20,
+    onPanResponderMove: (_, g) => {
+      if (g.dx < 0) translateX.setValue(g.dx);
+    },
+    onPanResponderRelease: (_, g) => {
+      if (g.dx < -80) {
+        Animated.timing(translateX, { toValue: -80, duration: 100, useNativeDriver: true }).start();
+      } else {
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+      }
+    },
+  })).current;
+
+  return (
+    <View style={{ marginBottom: 10, position: 'relative' }}>
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => {
+          Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(onDelete);
+        }}
+      >
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const [selectedExercise, setSelectedExercise] = useState('');
@@ -30,7 +64,6 @@ export default function HomeScreen() {
       const saved = await AsyncStorage.getItem('workoutLog');
       const lastDate = await AsyncStorage.getItem('workoutLogDate');
       const today = new Date().toDateString();
-
       if (lastDate !== today) {
         await AsyncStorage.setItem('workoutLog', JSON.stringify([]));
         await AsyncStorage.setItem('workoutLogDate', today);
@@ -56,6 +89,12 @@ export default function HomeScreen() {
     setSets('');
     setReps('');
     setWeight('');
+  }
+
+  async function deleteEntry(id) {
+    const newLog = log.filter(e => e.id !== id);
+    setLog(newLog);
+    await AsyncStorage.setItem('workoutLog', JSON.stringify(newLog));
   }
 
   return (
@@ -84,41 +123,23 @@ export default function HomeScreen() {
 
       {selectedExercise ? (
         <>
-          <Text style={styles.selectedLabel}>Logging: <Text style={styles.selectedName}>{selectedExercise}</Text></Text>
-
+          <Text style={styles.selectedLabel}>
+            Logging: <Text style={styles.selectedName}>{selectedExercise}</Text>
+          </Text>
           <View style={styles.row}>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Sets</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={sets}
-                onChangeText={setSets}
-                placeholder="3"
-              />
+              <TextInput style={styles.input} keyboardType="numeric" value={sets} onChangeText={setSets} placeholder="3" />
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Reps</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={reps}
-                onChangeText={setReps}
-                placeholder="10"
-              />
+              <TextInput style={styles.input} keyboardType="numeric" value={reps} onChangeText={setReps} placeholder="10" />
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Weight (lbs)</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                value={weight}
-                onChangeText={setWeight}
-                placeholder="135"
-              />
+              <TextInput style={styles.input} keyboardType="numeric" value={weight} onChangeText={setWeight} placeholder="135" />
             </View>
           </View>
-
           <TouchableOpacity style={styles.button} onPress={saveSet}>
             <Text style={styles.buttonText}>Save Set</Text>
           </TouchableOpacity>
@@ -131,12 +152,14 @@ export default function HomeScreen() {
         <View style={styles.logSection}>
           <Text style={styles.logTitle}>Today's Workout</Text>
           {log.map(entry => (
-            <View key={entry.id} style={styles.logEntry}>
-              <Text style={styles.logExercise}>{entry.exercise}</Text>
-              <Text style={styles.logDetail}>
-                {entry.sets} sets × {entry.reps} reps @ {entry.weight} lbs
-              </Text>
-            </View>
+            <SwipeableEntry key={entry.id} onDelete={() => deleteEntry(entry.id)}>
+              <View style={styles.logEntry}>
+                <Text style={styles.logExercise}>{entry.exercise}</Text>
+                <Text style={styles.logDetail}>
+                  {entry.sets} sets × {entry.reps} reps @ {entry.weight} lbs
+                </Text>
+              </View>
+            </SwipeableEntry>
           ))}
         </View>
       )}
@@ -164,7 +187,9 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   logSection: { borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 24 },
   logTitle: { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 16 },
-  logEntry: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
+  logEntry: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14 },
   logExercise: { fontSize: 15, fontWeight: '600', color: '#111', marginBottom: 4 },
   logDetail: { fontSize: 14, color: '#666' },
+  deleteAction: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, backgroundColor: '#E24B4A', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  deleteActionText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });

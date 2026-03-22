@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert, Modal,
+  Alert,
+  Animated,
+  Modal,
+  PanResponder,
   ScrollView,
   StyleSheet, Text,
   TextInput,
@@ -12,6 +15,39 @@ import {
 } from 'react-native';
 
 const MEALS = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
+
+function SwipeableEntry({ children, onDelete }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dy) < 20,
+    onPanResponderMove: (_, g) => {
+      if (g.dx < 0) translateX.setValue(g.dx);
+    },
+    onPanResponderRelease: (_, g) => {
+      if (g.dx < -80) {
+        Animated.timing(translateX, { toValue: -80, duration: 100, useNativeDriver: true }).start();
+      } else {
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+      }
+    },
+  })).current;
+
+  return (
+    <View style={{ marginBottom: 10, position: 'relative' }}>
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => {
+          Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(onDelete);
+        }}
+      >
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function NutritionScreen() {
   const [selectedMeal, setSelectedMeal] = useState('');
@@ -87,30 +123,23 @@ export default function NutritionScreen() {
     setScanning(false);
     setScannerOpen(false);
     setLoadingProduct(true);
-
     try {
       const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${data}.json`);
       const json = await res.json();
-
       if (json.status !== 1 || !json.product) {
-        Alert.alert('Product not found', 'This barcode wasn\'t found in the Open Food Facts database. Please enter nutrition manually.');
+        Alert.alert('Product not found', 'This barcode wasn\'t found. Please enter nutrition manually.');
         setLoadingProduct(false);
         return;
       }
-
       const p = json.product;
       const nutriments = p.nutriments || {};
-      const servingSize = p.serving_quantity || 100;
-
       const base = {
         name: p.product_name || 'Unknown product',
         calories: Math.round(nutriments['energy-kcal_serving'] || nutriments['energy-kcal_100g'] || 0),
         protein: Math.round((nutriments['proteins_serving'] || nutriments['proteins_100g'] || 0) * 10) / 10,
         carbs: Math.round((nutriments['carbohydrates_serving'] || nutriments['carbohydrates_100g'] || 0) * 10) / 10,
         fat: Math.round((nutriments['fat_serving'] || nutriments['fat_100g'] || 0) * 10) / 10,
-        servingSize,
       };
-
       setBaseNutrition(base);
       setFoodName(base.name);
       setQuantity('1');
@@ -151,6 +180,12 @@ export default function NutritionScreen() {
     setFat('');
     setQuantity('1');
     setBaseNutrition(null);
+  }
+
+  async function deleteEntry(id) {
+    const newLog = log.filter(e => e.id !== id);
+    setLog(newLog);
+    await AsyncStorage.setItem('nutritionLog', JSON.stringify(newLog));
   }
 
   function ProgressBar({ label, current, target, color, large }) {
@@ -281,15 +316,17 @@ export default function NutritionScreen() {
         <View style={styles.logSection}>
           <Text style={styles.logTitle}>Today's Food</Text>
           {log.map(entry => (
-            <View key={entry.id} style={styles.logEntry}>
-              <View style={styles.logEntryTop}>
-                <Text style={styles.logFood}>{entry.foodName}</Text>
-                <Text style={styles.logMeal}>{entry.selectedMeal}</Text>
+            <SwipeableEntry key={entry.id} onDelete={() => deleteEntry(entry.id)}>
+              <View style={styles.logEntry}>
+                <View style={styles.logEntryTop}>
+                  <Text style={styles.logFood}>{entry.foodName}</Text>
+                  <Text style={styles.logMeal}>{entry.selectedMeal}</Text>
+                </View>
+                <Text style={styles.logDetail}>
+                  {entry.calories} kcal · {entry.protein}g protein · {entry.carbs}g carbs · {entry.fat}g fat
+                </Text>
               </View>
-              <Text style={styles.logDetail}>
-                {entry.calories} kcal · {entry.protein}g protein · {entry.carbs}g carbs · {entry.fat}g fat
-              </Text>
-            </View>
+            </SwipeableEntry>
           ))}
         </View>
       )}
@@ -359,11 +396,13 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
   logSection: { borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 24 },
   logTitle: { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 16 },
-  logEntry: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
+  logEntry: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14 },
   logEntryTop: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
   logFood: { fontSize: 15, fontWeight: '600', color: '#111', flex: 1 },
   logMeal: { fontSize: 12, color: '#888', fontWeight: '500' },
   logDetail: { fontSize: 13, color: '#666' },
+  deleteAction: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, backgroundColor: '#E24B4A', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  deleteActionText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   scannerContainer: { flex: 1, backgroundColor: '#000' },
   camera: { flex: 1 },
   scannerOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' },

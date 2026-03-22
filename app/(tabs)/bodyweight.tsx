@@ -1,13 +1,47 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     Alert,
+    Animated, PanResponder,
     ScrollView,
     StyleSheet, Text,
     TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
+
+function SwipeableEntry({ children, onDelete }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(PanResponder.create({
+    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dy) < 20,
+    onPanResponderMove: (_, g) => {
+      if (g.dx < 0) translateX.setValue(g.dx);
+    },
+    onPanResponderRelease: (_, g) => {
+      if (g.dx < -80) {
+        Animated.timing(translateX, { toValue: -80, duration: 100, useNativeDriver: true }).start();
+      } else {
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+      }
+    },
+  })).current;
+
+  return (
+    <View style={{ marginBottom: 8, position: 'relative' }}>
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => {
+          Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(onDelete);
+        }}
+      >
+        <Text style={styles.deleteActionText}>Delete</Text>
+      </TouchableOpacity>
+      <Animated.View style={{ transform: [{ translateX }] }} {...panResponder.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
 
 export default function BodyWeightScreen() {
   const [weight, setWeight] = useState('');
@@ -52,6 +86,12 @@ export default function BodyWeightScreen() {
     setLog(newLog);
     await AsyncStorage.setItem('bodyweightLog', JSON.stringify(newLog));
     setWeight('');
+  }
+
+  async function deleteWeightEntry(index) {
+    const newLog = log.filter((_, i) => i !== index);
+    setLog(newLog);
+    await AsyncStorage.setItem('bodyweightLog', JSON.stringify(newLog));
   }
 
   const latest = log[0]?.weight;
@@ -115,8 +155,8 @@ export default function BodyWeightScreen() {
           })}
         </View>
         <View style={styles.chartLabels}>
-          <Text style={styles.chartLabel}>{weights[0]} lbs</Text>
-          <Text style={styles.chartLabel}>{weights[weights.length - 1]} lbs</Text>
+          <Text style={styles.chartLabel}>{[...log].reverse()[0].weight} lbs</Text>
+          <Text style={styles.chartLabel}>{[...log].reverse()[log.length - 1].weight} lbs</Text>
         </View>
       </View>
     );
@@ -171,10 +211,12 @@ export default function BodyWeightScreen() {
         <View style={styles.logSection}>
           <Text style={styles.logTitle}>History</Text>
           {log.map((entry, i) => (
-            <View key={i} style={styles.logEntry}>
-              <Text style={styles.logDate}>{entry.date}</Text>
-              <Text style={styles.logWeight}>{entry.weight} lbs</Text>
-            </View>
+  <SwipeableEntry key={entry.date + entry.weight} onDelete={() => deleteWeightEntry(i)}>
+              <View style={styles.logEntry}>
+                <Text style={styles.logDate}>{entry.date}</Text>
+                <Text style={styles.logWeight}>{entry.weight} lbs</Text>
+              </View>
+            </SwipeableEntry>
           ))}
         </View>
       )}
@@ -200,7 +242,9 @@ const styles = StyleSheet.create({
   buttonText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   logSection: { borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 24 },
   logTitle: { fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 16 },
-  logEntry: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: '#eee' },
+  logEntry: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 4, backgroundColor: '#fff', borderBottomWidth: 0.5, borderBottomColor: '#eee' },
   logDate: { fontSize: 14, color: '#888' },
   logWeight: { fontSize: 14, fontWeight: '600', color: '#111' },
+  deleteAction: { position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, backgroundColor: '#E24B4A', borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  deleteActionText: { color: '#fff', fontWeight: '700', fontSize: 13 },
 });
